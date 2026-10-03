@@ -1,55 +1,55 @@
-# Incident 09 — Service web arrêté (port/service inaccessible)
+# Incident 09 — Web service stopped (port/service unreachable)
 
-## Catégorie
-Couche application
+## Category
+Application layer
 
-## Scénario
+## Scenario
 
-Incident volontairement provoqué : arrêt du service Nginx sur `SRV-Ubuntu1`.
+Deliberately staged incident: stopped the Nginx service on `SRV-Ubuntu1`.
 ```
 sudo systemctl stop nginx
 ```
 
-## Symptôme
+## Symptom
 
-Depuis `PC-user1` :
+From `PC-user1`:
 ```
 ping 10.10.20.10
 ```
-→ 0% perte, succès normal (couche réseau/IP intacte, le serveur répond bien aux ICMP).
+→ 0% loss, normal success (network/IP layer intact, the server still replies to ICMP).
 
 ```
 curl http://10.10.20.10
 ```
-→ échec immédiat :
+→ immediate failure:
 ```
 curl: (7) Failed to connect to 10.10.20.10 port 80 after 2062 ms: Could not connect to server
 ```
 
-## Analyse
+## Analysis
 
-La différence entre les deux résultats est la clé de cet incident : un ping réussi prouve que la machine est allumée, routée correctement, et que le firewall autorise au moins le trafic ICMP — mais ne dit **rien** sur l'état d'un service applicatif précis. La couche réseau (3) et la couche application (7) doivent être testées séparément.
+The difference between the two results is the key point of this incident: a successful ping proves the machine is powered on, routed correctly, and that the firewall allows at least ICMP traffic — but it says **nothing** about the state of a specific application service. The network layer (3) and the application layer (7) need to be tested separately.
 
-## Diagnostic (côté serveur)
+## Diagnosis (server side)
 
 ```
 sudo systemctl status nginx
 ```
-→ statut `inactive (dead)`, confirme l'arrêt du service.
+→ status `inactive (dead)`, confirms the service is stopped.
 
-## Correction
+## Fix
 
 ```
 sudo systemctl start nginx
 ```
 
-## Vérification
+## Verification
 
 ```
 curl http://10.10.20.10
 ```
-→ page HTML complète "Welcome to nginx!" correctement retournée.
+→ full "Welcome to nginx!" HTML page correctly returned.
 
-## Leçon retenue
+## Lesson learned
 
-Toujours distinguer les couches lors d'un diagnostic réseau : connectivité (ping, couche 3) ≠ disponibilité d'un service applicatif (couche 7). Un ping réussi ne garantit jamais qu'un service précis fonctionne sur la machine cible ; il faut tester le port/protocole concerné spécifiquement (`curl`, `telnet host port`, ou équivalent) pour confirmer l'état réel du service.
+Always separate layers during network diagnosis: connectivity (ping, layer 3) ≠ application service availability (layer 7). A successful ping never guarantees a specific service is actually running on the target machine; the relevant port/protocol must be tested directly (`curl`, `telnet host port`, or equivalent) to confirm the service's actual state.

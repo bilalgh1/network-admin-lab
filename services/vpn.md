@@ -1,43 +1,43 @@
-# VPN d'accès distant (WireGuard)
+# Remote Access VPN (WireGuard)
 
-## Scénario
+## Scenario
 
-Un administrateur travaille depuis chez lui et doit pouvoir accéder au réseau IT pour l'administration à distance. Un utilisateur VPN standard ne doit en revanche **pas** avoir accès à l'ensemble du réseau de l'entreprise (SERVERS, LAN restent inaccessibles).
+An administrator works from home and needs to access the IT network for remote administration. A standard VPN user, on the other hand, should **not** have access to the entire company network (SERVERS and LAN must stay unreachable).
 
-## Choix technique
+## Technology choice
 
-**WireGuard** a été retenu plutôt qu'OpenVPN ou IPsec : protocole moderne, natif dans OPNsense, configuration plus simple (paire de clés + quelques champs), et outil intégré ("Peer generator") qui génère automatiquement la configuration client complète.
+**WireGuard** was chosen over OpenVPN or IPsec: a modern protocol, native to OPNsense, simpler to configure (a key pair plus a few fields), and it comes with a built-in tool ("Peer generator") that automatically generates the full client configuration.
 
 ## Architecture
 
-| Élément | Valeur |
+| Element | Value |
 |---|---|
-| Réseau VPN | 10.10.99.0/24 |
-| Instance serveur (OPNsense) | `wg0`, Listen port UDP/51820, Tunnel Address 10.10.99.1/24 |
-| Interface logique assignée | OPT3 → renommée `WIREGUARD` |
-| Client testé | `PC-Admin-Remote`, VM isolée simulant un poste "à la maison" (hors de tous les réseaux internes du lab) |
+| VPN network | 10.10.99.0/24 |
+| Server instance (OPNsense) | `wg0`, Listen port UDP/51820, Tunnel Address 10.10.99.1/24 |
+| Assigned logical interface | OPT3 → renamed `WIREGUARD` |
+| Tested client | `PC-Admin-Remote`, an isolated VM simulating a "home" workstation (outside all internal lab networks) |
 
-## Restriction de sécurité — défense en profondeur
+## Security restriction — defense in depth
 
-La contrainte "un utilisateur VPN standard n'accède pas à tout le réseau" est appliquée à **deux niveaux indépendants** :
+The "a standard VPN user doesn't get access to the whole network" requirement is enforced at **two independent levels**:
 
-1. **Niveau tunnel** : le champ `AllowedIPs = 10.10.30.0/24` sur le peer limite, au niveau du protocole WireGuard lui-même, les destinations que le client peut router à travers le tunnel — techniquement, le client ne peut même pas tenter d'envoyer du trafic vers SERVERS ou LAN via ce tunnel.
-2. **Niveau firewall** : une règle sur l'interface `WIREGUARD` n'autorise explicitement que `WireGuard net → IT net`, conformément au principe deny by default déjà appliqué aux autres interfaces du lab.
+1. **Tunnel level**: the `AllowedIPs = 10.10.30.0/24` field on the peer restricts, at the WireGuard protocol level itself, which destinations the client can route through the tunnel — technically, the client can't even attempt to send traffic to SERVERS or LAN through this tunnel.
+2. **Firewall level**: a rule on the `WIREGUARD` interface only allows `WireGuard net → IT net`, consistent with the deny-by-default principle already applied to the other interfaces in this lab.
 
-## Tests de validation
+## Validation tests
 
-| Test (depuis PC-Admin-Remote, via le tunnel) | Résultat attendu | Résultat obtenu |
+| Test (from PC-Admin-Remote, through the tunnel) | Expected result | Actual result |
 |---|---|---|
-| `ping 10.10.30.1` (IT) | Succès | ✅ 0% perte |
-| `ping 10.10.20.10` (SERVERS) | Échec | ✅ 100% perte |
-| `ping 10.10.10.1` (LAN) | Échec | ✅ 100% perte |
+| `ping 10.10.30.1` (IT) | Success | ✅ 0% loss |
+| `ping 10.10.20.10` (SERVERS) | Fail | ✅ 100% loss |
+| `ping 10.10.10.1` (LAN) | Fail | ✅ 100% loss |
 
-## Incident — échec de handshake, plusieurs causes imbriquées
+## Incident — handshake failure, multiple intertwined causes
 
-La mise en place du VPN a rencontré un incident particulièrement riche, avec plusieurs causes indépendantes qu'il a fallu isoler une à une : topologie réseau WAN (NAT puis Bridged puis réseau simulé), options "Block private networks"/"Block bogon networks" bloquant silencieusement le trafic entrant sur WAN avant même l'évaluation des règles personnalisées, et configuration client obsolète après plusieurs itérations de test.
+Setting up the VPN ran into a particularly rich incident, with several independent causes that had to be isolated one by one: WAN network topology (NAT, then Bridged, then a simulated internal network), "Block private networks"/"Block bogon networks" options silently blocking inbound traffic on WAN before custom rules were even evaluated, and a stale client configuration left over from several rounds of testing.
 
-Démarche de diagnostic complète (tcpdump sur l'interface WAN, vérification du statut du peer, isolement de chaque variable) et résolution finale détaillées dans [troubleshooting/incident-04.md](../troubleshooting/incident-04.md).
+Full diagnostic walkthrough (tcpdump on the WAN interface, peer status checks, isolating each variable) and final resolution detailed in [troubleshooting/incident-04.md](../troubleshooting/incident-04.md).
 
-## Note de sécurité pour un déploiement réel
+## Security note for a real-world deployment
 
-Les options "Block private networks" et "Block bogon networks" ont été décochées sur l'interface WAN pour permettre le fonctionnement du VPN dans ce lab (où le trafic transite par des adresses privées/réservées en interne). **Sur un firewall exposé à une vraie adresse IP publique Internet, ces options doivent rester activées** — leur désactivation n'est acceptable que dans ce contexte de lab isolé.
+The "Block private networks" and "Block bogon networks" options were disabled on the WAN interface to make the VPN work in this lab (where traffic travels over private/reserved addresses internally). **On a firewall exposed to a real public Internet IP, these options must stay enabled** — disabling them is only acceptable in this isolated lab context.

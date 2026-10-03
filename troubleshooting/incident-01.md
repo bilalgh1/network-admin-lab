@@ -1,47 +1,47 @@
-# Incident 01 — Interfaces WAN/LAN inversées
+# Incident 01 — WAN/LAN interfaces swapped
 
-## Catégorie
-Configuration réseau / assignation d'interfaces
+## Category
+Network configuration / interface assignment
 
-## Symptôme
+## Symptom
 
-`PC-user1` (branché sur le réseau `intnet-users`, destiné à devenir LAN) reçoit une adresse APIPA (`169.254.x.x`) au lieu d'une IP DHCP valide. `ipconfig /release` puis `/renew` échoue avec :
+`PC-user1` (connected to the `intnet-users` network, intended to become LAN) receives an APIPA address (`169.254.x.x`) instead of a valid DHCP lease. `ipconfig /release` then `/renew` fails with:
 ```
 An error occurred while renewing interface Ethernet : unable to contact your DHCP server.
 ```
 
-## Hypothèses testées
+## Hypotheses tested
 
-1. **Mismatch de nom de réseau interne** entre les deux VMs (OPNsense et PC-user1) — comparaison caractère par caractère des champs "Name" dans VirtualBox des deux côtés → noms identiques (`intnet-users`) confirmés des deux côtés. Hypothèse écartée.
+1. **Mismatched internal network name** between the two VMs (OPNsense and PC-user1) — compared the "Name" field character by character in VirtualBox on both sides → identical names (`intnet-users`) confirmed on both sides. Hypothesis dismissed.
 
-## Commandes / vérifications
+## Commands / checks
 
-- `ipconfig /release` / `ipconfig /renew` côté client (Windows)
-- Comparaison visuelle des réglages réseau VirtualBox (`Configuration > Réseau`) des deux VMs
+- `ipconfig /release` / `ipconfig /renew` on the client (Windows)
+- Visual comparison of VirtualBox network settings (`Settings > Network`) on both VMs
 
-## Analyse
+## Analysis
 
-Au tout premier démarrage d'OPNsense, avant toute configuration manuelle, la console affiche par défaut `LAN (em0)` et `WAN (em1)`. Lors de l'étape "Assign interfaces" (console OPNsense, option 1), cette convention d'affichage a été suivie sans vérification — **mais l'ordre réel de détection des cartes par le système ne correspondait pas à cet affichage par défaut**. Concrètement, la carte physiquement branchée sur `intnet-users` (censée devenir LAN) a été déclarée WAN, et la carte en mode Bridged (censée être WAN) a été déclarée LAN.
+On OPNsense's very first boot, before any manual configuration, the console displays `LAN (em0)` and `WAN (em1)` by default. During the "Assign interfaces" step (OPNsense console, option 1), this display convention was followed without verification — **but the actual card detection order didn't match this default display**. Specifically, the card physically wired to `intnet-users` (meant to become LAN) was declared WAN, and the Bridged card (meant to be WAN) was declared LAN.
 
-## Cause
+## Root cause
 
-Interfaces WAN et LAN inversées lors de l'assignation initiale : l'interface nommée "LAN" par OPNsense était en réalité la carte Bridged (connectée à Internet, pas au réseau client), et "WAN" était en réalité branchée sur `intnet-users`. Le service DHCP (attendu sur LAN) tournait donc sur l'interface physiquement connectée à Internet — inaccessible pour `PC-user1`.
+WAN and LAN interfaces swapped during initial assignment: the interface named "LAN" by OPNsense was actually the Bridged card (connected to the Internet, not the client network), and "WAN" was actually wired to `intnet-users`. The DHCP service (expected on LAN) was therefore running on the interface physically connected to the Internet — unreachable from `PC-user1`.
 
-## Correction
+## Fix
 
-Réassignation via le menu console OPNsense (option 1, "Assign interfaces") :
-- `em0` → WAN (au lieu de LAN)
-- `em1` → LAN (au lieu de WAN)
+Reassigned via the OPNsense console menu (option 1, "Assign interfaces"):
+- `em0` → WAN (instead of LAN)
+- `em1` → LAN (instead of WAN)
 
-Puis reconfiguration de l'adresse IP sur LAN (option 2) : `10.10.10.1/24`, DHCP relancé avec la plage `10.10.10.100`-`10.10.10.200`.
+Then reconfigured the IP address on LAN (option 2): `10.10.10.1/24`, DHCP restarted with the `10.10.10.100`-`10.10.10.200` range.
 
-## Vérification
+## Verification
 
 ```
 ipconfig
 ```
-sur `PC-user1` → IP `10.10.10.101/24`, gateway `10.10.10.1` obtenue correctement.
+on `PC-user1` → IP `10.10.10.101/24`, gateway `10.10.10.1` correctly obtained.
 
-## Leçon retenue
+## Lesson learned
 
-Ne pas se fier à l'affichage par défaut d'OPNsense au tout premier boot pour déterminer quelle carte physique correspond à quelle interface logique. En cas de doute, vérifier avec `ifconfig` en shell (Diagnostics > Shell, ou option 8 du menu console) pour confirmer l'état réel (IP, lien actif) de chaque interface avant de valider une assignation.
+Don't trust OPNsense's default display on first boot to determine which physical card maps to which logical interface. When in doubt, check with `ifconfig` in shell (Diagnostics > Shell, or console menu option 8) to confirm the actual state (IP, link status) of each interface before confirming an assignment.

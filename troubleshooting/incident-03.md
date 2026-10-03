@@ -1,53 +1,53 @@
-# Incident 03 — Conflit DNS Dnsmasq / Unbound (forwarding company.local en échec)
+# Incident 03 — DNS conflict between Dnsmasq and Unbound (company.local forwarding failure)
 
-## Catégorie
-Service / conflit de port
+## Category
+Service / port conflict
 
-## Objectif initial
+## Initial goal
 
-Permettre à tous les postes du réseau (utilisant OPNsense comme DNS unique) de résoudre les noms internes du domaine Active Directory `company.local`, en redirigeant ces requêtes spécifiques vers le contrôleur de domaine (`10.10.20.20`), sans reconfigurer chaque client individuellement.
+Allow every host on the network (using OPNsense as the single DNS server) to resolve internal names from the `company.local` Active Directory domain, by forwarding those specific queries to the domain controller (`10.10.20.20`), without reconfiguring each client individually.
 
-## Configuration mise en place (a priori correcte)
+## Configuration put in place (seemingly correct)
 
-`Services > Dnsmasq DNS & DHCP > Domains` : entrée `company.local → 10.10.20.20` (conditional forwarding).
+`Services > Dnsmasq DNS & DHCP > Domains`: entry `company.local → 10.10.20.20` (conditional forwarding).
 
-## Symptôme
+## Symptom
 
-- `nslookup WIN-A5T5IRJE99D.company.local 10.10.20.20` (interrogation directe du contrôleur de domaine) → **succès**
-- `nslookup WIN-A5T5IRJE99D.company.local 10.10.10.1` (via OPNsense) → **échec** :
+- `nslookup WIN-A5T5IRJE99D.company.local 10.10.20.20` (querying the domain controller directly) → **success**
+- `nslookup WIN-A5T5IRJE99D.company.local 10.10.10.1` (via OPNsense) → **failure**:
 ```
 *** OPNsense.internal can't find WIN-A5T5IRJE99D.company.local: Non-existent domain
 ```
 
-## Démarche de diagnostic
+## Diagnostic process
 
-1. Vérification de la configuration Dnsmasq (champs Domain / IP or Host) → syntaxe correcte, rien à corriger.
-2. Forcer "Apply" et redémarrage manuel du service Dnsmasq (bouton de contrôle du service) → aucun changement observé.
-3. **Capture tcpdump côté OPNsense**, sur l'interface SERVERS, pendant un nouveau test :
+1. Checked the Dnsmasq configuration (Domain / IP or Host fields) → syntax correct, nothing to fix.
+2. Forced "Apply" and manually restarted the Dnsmasq service (service control button) → no change observed.
+3. **tcpdump capture on OPNsense**, on the SERVERS interface, during a fresh test:
 ```
 tcpdump -i em2 port 53 -n
 ```
-Résultat : **silence total** — aucun paquet DNS sortant vers `10.10.20.20` pendant la tentative de résolution. Contrairement à l'incident 02 (où le paquet arrivait mais n'était pas traité), ici la requête n'était **même pas émise** par OPNsense vers le contrôleur — signe que la requête cliente n'atteignait jamais le bon processus en interne sur OPNsense.
-4. Vérification du champ `Services > Dnsmasq DNS & DHCP > General > Listen port` : configuré sur **`53053`**, pas le port DNS standard (`53`). Un client interroge par défaut le port 53 ; Dnsmasq, en écoute sur 53053, ne recevait donc jamais la requête initiale du client.
-5. Vérification de `Services > Unbound DNS` : service **activé** en parallèle de Dnsmasq.
+Result: **complete silence** — no DNS packet going out toward `10.10.20.20` during the resolution attempt. Unlike incident 02 (where the packet arrived but wasn't processed), here the request wasn't even **sent** by OPNsense to the controller — a sign that the client request never reached the right internal process on OPNsense in the first place.
+4. Checked `Services > Dnsmasq DNS & DHCP > General > Listen port`: set to **`53053`**, not the standard DNS port (`53`). A client queries port 53 by default; Dnsmasq, listening on 53053, never received the initial client request.
+5. Checked `Services > Unbound DNS`: service **enabled** in parallel with Dnsmasq.
 
-## Cause
+## Root cause
 
-**Deux serveurs DNS actifs simultanément sur OPNsense** — Dnsmasq (port personnalisé 53053) et Unbound DNS (port standard 53), sans coordination entre eux. Les clients, interrogeant le port 53 standard par défaut, recevaient en réalité les réponses d'**Unbound** — qui ignore totalement la règle de forwarding configurée dans Dnsmasq, d'où le "Non-existent domain". La configuration de forwarding, pourtant syntaxiquement correcte, était appliquée au mauvais service — celui qui n'était jamais réellement sollicité par le trafic client.
+**Two DNS servers active simultaneously on OPNsense** — Dnsmasq (custom port 53053) and Unbound DNS (standard port 53), with no coordination between them. Clients, querying the standard port 53 by default, were actually getting answers from **Unbound** — which completely ignores the forwarding rule configured in Dnsmasq, hence the "Non-existent domain". The forwarding configuration, syntactically correct, was applied to the wrong service — the one never actually queried by client traffic.
 
-## Correction
+## Fix
 
-1. Désactivation d'Unbound DNS (`Services > Unbound DNS > General > Enable` décoché, Save)
-2. Remise de Dnsmasq sur le port standard : `Services > Dnsmasq DNS & DHCP > General > Listen port` = `53`, Save
-3. Redémarrage forcé du service Dnsmasq
+1. Disabled Unbound DNS (`Services > Unbound DNS > General > Enable` unchecked, Save)
+2. Moved Dnsmasq back to the standard port: `Services > Dnsmasq DNS & DHCP > General > Listen port` = `53`, Save
+3. Forced a restart of the Dnsmasq service
 
-## Vérification
+## Verification
 
 ```
 nslookup WIN-A5T5IRJE99D.company.local 10.10.10.1
 ```
-→ réponse correcte (`10.10.20.20`).
+→ correct answer (`10.10.20.20`).
 
-## Leçon retenue
+## Lesson learned
 
-Sur OPNsense, plusieurs services DNS (Dnsmasq, Unbound, Kea DHCP) peuvent coexister et être activés indépendamment, sans avertissement de conflit. Il faut s'assurer qu'un seul service DNS "fait réellement autorité" sur le port standard 53 — sinon une configuration par ailleurs correcte sur un service n'a aucun effet sur le trafic réellement traité par l'autre. C'est un piège silencieux qui ne se révèle qu'en croisant la configuration (Listen port) avec une capture réseau montrant l'absence totale de requête sortante.
+On OPNsense, several DNS services (Dnsmasq, Unbound, Kea DHCP) can coexist and be enabled independently, with no conflict warning. You need to make sure only one DNS service is actually "authoritative" on the standard port 53 — otherwise a correct configuration on one service has zero effect on traffic actually handled by the other. This is a silent trap that only shows up by cross-referencing the configuration (Listen port) with a packet capture showing a total absence of outbound requests.

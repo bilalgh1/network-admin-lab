@@ -1,42 +1,42 @@
-# Service DNS
+# DNS Service
 
-## Architecture de résolution
+## Resolution architecture
 
 ```
 Client (LAN/SERVERS/IT)
       │  DNS = 10.10.10.1 (OPNsense)
       ▼
 OPNsense — Dnsmasq DNS & DHCP (port 53)
-      │  requêtes *.company.local → forward
+      │  *.company.local queries → forward
       ▼
-DC-Server1 — DNS Windows (Active Directory intégré)
+DC-Server1 — Windows DNS (integrated with Active Directory)
       10.10.20.20
 ```
 
-Les clients du réseau utilisent OPNsense comme DNS unique. OPNsense résout lui-même les requêtes génériques (vers Internet) et **redirige conditionnellement** les requêtes concernant le domaine `company.local` vers le contrôleur de domaine Active Directory, qui fait autorité sur ce domaine.
+Clients on the network use OPNsense as their single DNS server. OPNsense resolves generic queries itself (toward the Internet) and **conditionally forwards** queries for the `company.local` domain to the Active Directory domain controller, which is authoritative for that domain.
 
 ## Configuration
 
-- **OPNsense** : `Services > Dnsmasq DNS & DHCP > Domains` — entrée `company.local → 10.10.20.20` (conditional forwarding)
-- **DC-Server1** : rôle DNS Server installé automatiquement avec Active Directory Domain Services lors de la promotion en contrôleur de domaine (domaine racine `company.local`, NetBIOS `COMPANY`)
+- **OPNsense**: `Services > Dnsmasq DNS & DHCP > Domains` — entry `company.local → 10.10.20.20` (conditional forwarding)
+- **DC-Server1**: DNS Server role installed automatically alongside Active Directory Domain Services when promoted to domain controller (root domain `company.local`, NetBIOS `COMPANY`)
 
-## Incident majeur — conflit entre deux services DNS actifs
+## Major incident — conflict between two active DNS services
 
-Le forwarding, bien que configuré correctement dès le départ, ne fonctionnait pas. La cause réelle : **deux services DNS actifs simultanément sur OPNsense** — Dnsmasq (configuré sur un port non standard, `53053`, visible dans `General > Listen port`) et **Unbound DNS**, activé en parallèle et répondant réellement sur le port standard 53. Les clients interrogeant le port 53 standard recevaient donc les réponses d'Unbound, qui ignorait totalement la règle de forwarding configurée dans Dnsmasq.
+The forwarding rule, although configured correctly from the start, simply didn't work. The actual cause: **two DNS services active simultaneously on OPNsense** — Dnsmasq (configured on a non-standard port, `53053`, visible in `General > Listen port`) and **Unbound DNS**, enabled in parallel and actually answering on the standard port 53. Clients querying the standard port 53 were therefore getting answers from Unbound, which completely ignored the forwarding rule configured in Dnsmasq.
 
-Diagnostic complet, capture tcpdump à l'appui, dans [troubleshooting/incident-03.md](../troubleshooting/incident-03.md).
+Full diagnosis, backed by a tcpdump capture, in [troubleshooting/incident-03.md](../troubleshooting/incident-03.md).
 
-**Correction** : désactivation d'Unbound DNS, remise de Dnsmasq sur le port standard 53.
+**Fix**: disabled Unbound DNS, moved Dnsmasq back to the standard port 53.
 
-## Tests de validation
+## Validation tests
 
-| Test | Résultat |
+| Test | Result |
 |---|---|
-| `nslookup WIN-A5T5IRJE99D.company.local 10.10.20.20` (direct sur le DC) | ✅ Résout correctement |
-| `nslookup WIN-A5T5IRJE99D.company.local 10.10.10.1` (via OPNsense, avant correction) | ❌ "Non-existent domain" |
-| `nslookup WIN-A5T5IRJE99D.company.local 10.10.10.1` (via OPNsense, après correction) | ✅ Résout correctement (`10.10.20.20`) |
-| `ping google.com` depuis PC-user1 et SRV-Ubuntu1 (résolution externe) | ✅ Fonctionnelle de bout en bout |
+| `nslookup WIN-A5T5IRJE99D.company.local 10.10.20.20` (direct to the DC) | ✅ Resolves correctly |
+| `nslookup WIN-A5T5IRJE99D.company.local 10.10.10.1` (via OPNsense, before fix) | ❌ "Non-existent domain" |
+| `nslookup WIN-A5T5IRJE99D.company.local 10.10.10.1` (via OPNsense, after fix) | ✅ Resolves correctly (`10.10.20.20`) |
+| `ping google.com` from PC-user1 and SRV-Ubuntu1 (external resolution) | ✅ Fully functional |
 
-## Résilience testée
+## Resilience tested
 
-Le service DNS de `DC-Server1` a été volontairement arrêté (`net stop DNS`) pour observer le comportement en cas de panne — voir [troubleshooting/incident-10.md](../troubleshooting/incident-10.md). Confirme la dépendance de toute la chaîne de résolution interne à ce service : une panne casse la résolution `company.local` de bout en bout, même si OPNsense et le reste du réseau restent fonctionnels.
+The DNS service on `DC-Server1` was deliberately stopped (`net stop DNS`) to observe failure behavior — see [troubleshooting/incident-10.md](../troubleshooting/incident-10.md). Confirms the whole internal resolution chain's dependency on this service: an outage breaks `company.local` resolution end to end, even though OPNsense and the rest of the network stay fully functional.

@@ -1,35 +1,35 @@
-# Segmentation réseau (VLANs équivalents)
+# Network Segmentation (VLAN equivalents)
 
-## Approche retenue
+## Approach
 
-Ce lab étant construit en virtualisation pure (VirtualBox), la segmentation n'est pas réalisée via un switch physique/virtuel avec trunking 802.1Q, mais via des **réseaux internes VirtualBox isolés** ("Internal Network"), chacun branché sur sa propre interface réseau d'OPNsense. Chaque réseau interne joue le rôle d'un VLAN : les machines qui y sont connectées ne peuvent communiquer qu'entre elles et avec OPNsense, jamais directement avec un autre segment — tout trafic inter-segment passe obligatoirement par le firewall.
+Since this lab is built in pure virtualization (VirtualBox), segmentation isn't implemented through a physical/virtual switch with 802.1Q trunking, but through **isolated VirtualBox internal networks** ("Internal Network"), each wired to its own OPNsense interface. Each internal network acts as a VLAN: machines connected to it can only talk to each other and to OPNsense — any inter-segment traffic must go through the firewall.
 
-| Réseau interne VirtualBox | Rôle (VLAN équivalent) | Interface OPNsense | Device |
+| VirtualBox internal network | Role (VLAN equivalent) | OPNsense interface | Device |
 |---|---|---|---|
-| `intnet-users` | Users (VLAN 10 équivalent) | LAN | em1 |
-| `intnet-servers` | Servers (VLAN 20 équivalent) | SERVERS | em2 |
-| `intnet-it` | IT / Admin (VLAN 30 équivalent) | IT | em3 |
-| *(carte Bridged/NAT)* | WAN — sortie Internet | WAN | em0 |
+| `intnet-users` | Users (VLAN 10 equivalent) | LAN | em1 |
+| `intnet-servers` | Servers (VLAN 20 equivalent) | SERVERS | em2 |
+| `intnet-it` | IT / Admin (VLAN 30 equivalent) | IT | em3 |
+| *(Bridged/NAT adapter)* | WAN — Internet uplink | WAN | em0 |
 
-*Limitation assumée et documentée dans [addressing/ip-plan.md](../addressing/ip-plan.md) : 4 réseaux au lieu de 5 prévus initialement, en raison de la limite de 4 cartes réseau par VM dans l'interface graphique VirtualBox.*
+*Assumed and documented limitation in [addressing/ip-plan.md](../addressing/ip-plan.md): 4 networks instead of the originally planned 5, due to the 4-network-adapter-per-VM limit in the VirtualBox GUI.*
 
-## Assignation des interfaces sur OPNsense
+## Interface assignment on OPNsense
 
-L'assignation des interfaces (`em0`-`em3` vers WAN/LAN/SERVERS/IT) se fait via le menu console d'OPNsense (option 1, "Assign interfaces"), puis l'attribution d'adresse IP (option 2, "Set interface IP address").
+Interface assignment (`em0`-`em3` mapped to WAN/LAN/SERVERS/IT) is done through the OPNsense console menu (option 1, "Assign interfaces"), then IP address assignment (option 2, "Set interface IP address").
 
-Chaque interface a ensuite été activée et nommée via l'interface web (`Interfaces > [nom]`) :
-- **Enable Interface** coché
-- **Description** renommée (LAN, SERVERS, IT) pour plus de lisibilité dans tout le reste de l'interface OPNsense (menus Firewall, Services, etc.)
-- **Static IPv4**, adresse correspondant au plan d'adressage
+Each interface was then enabled and labeled through the web interface (`Interfaces > [name]`):
+- **Enable Interface** checked
+- **Description** renamed (LAN, SERVERS, IT) for readability throughout the rest of the OPNsense UI (Firewall menus, Services, etc.)
+- **Static IPv4**, address matching the addressing plan
 
-## Point d'attention — inversion WAN/LAN au premier démarrage
+## Point of attention — WAN/LAN swapped on first boot
 
-Voir [troubleshooting/incident-01.md](../troubleshooting/incident-01.md) : lors du tout premier assign, les interfaces WAN et LAN ont été inversées par erreur (la carte physiquement reliée à `intnet-users` a été déclarée WAN, et inversement). OPNsense affiche par défaut `LAN (em0)` au tout premier boot avant toute configuration, ce qui peut induire en erreur sur l'ordre réel des cartes — toujours vérifier avec `ifconfig` en shell (Diagnostics > Shell) en cas de doute, plutôt que de se fier à l'ordre d'affichage initial.
+See [troubleshooting/incident-01.md](../troubleshooting/incident-01.md): on the very first "assign interfaces" step, WAN and LAN were swapped by mistake (the card physically wired to `intnet-users` was declared WAN, and vice versa). OPNsense shows `LAN (em0)` by default on first boot before any configuration, which can be misleading about the actual card order — always verify with `ifconfig` in shell (Diagnostics > Shell) if in doubt, rather than trusting the initial display order.
 
-## Interface VPN (WireGuard) comme segment logique supplémentaire
+## VPN interface (WireGuard) as an additional logical segment
 
-En Phase 8, l'instance WireGuard (`wg0`) a été assignée comme une interface logique à part entière (`Interfaces > Assignments`), apparaissant comme `OPT3` puis renommée `WIREGUARD`. Cette interface se comporte exactement comme les interfaces physiques (SERVERS, IT) du point de vue du firewall : deny by default tant qu'aucune règle n'est créée. Voir [services/vpn.md](../services/vpn.md).
+In Phase 8, the WireGuard instance (`wg0`) was assigned as a full logical interface (`Interfaces > Assignments`), appearing as `OPT3` and renamed `WIREGUARD`. This interface behaves exactly like the physical interfaces (SERVERS, IT) as far as the firewall is concerned: deny by default until a rule is created. See [services/vpn.md](../services/vpn.md).
 
-## Pistes d'amélioration
+## Future improvements
 
-Pour pratiquer le vrai trunking 802.1Q, le VLAN tagging, le Spanning Tree Protocol (STP) et l'EtherChannel/LACP comme prévu dans le brief original, la suite logique serait d'introduire un switch Cisco IOS virtualisé (GNS3 ou EVE-NG) entre OPNsense et les VMs, avec un port trunk vers le firewall et des ports access par VLAN vers chaque machine — non réalisé dans cette itération par contrainte de temps.
+To practice real 802.1Q trunking, VLAN tagging, Spanning Tree Protocol (STP), and EtherChannel/LACP as originally planned in the brief, the logical next step would be to introduce a virtualized Cisco IOS switch (GNS3 or EVE-NG) between OPNsense and the VMs, with a trunk port toward the firewall and access ports per VLAN toward each machine — not implemented in this iteration due to time constraints.

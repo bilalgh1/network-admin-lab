@@ -1,18 +1,18 @@
-# Service DHCP
+# DHCP Service
 
-## Technologie
+## Technology
 
-OPNsense 26.x remplace l'ancien menu DHCPv4 (configuré séparément par interface) par un service unifié : **Dnsmasq DNS & DHCP** (`Services > Dnsmasq DNS & DHCP`), qui gère DHCP et DNS ensemble. C'est le service retenu pour ce lab plutôt que l'alternative Kea DHCP également disponible.
+OPNsense 26.x replaces the older DHCPv4 menu (configured separately per interface) with a unified service: **Dnsmasq DNS & DHCP** (`Services > Dnsmasq DNS & DHCP`), which handles DHCP and DNS together. This is the service used in this lab, rather than the alternative Kea DHCP also available.
 
-## Configuration par réseau
+## Configuration per network
 
-| Réseau | DHCP activé | Plage | Justification |
+| Network | DHCP enabled | Range | Rationale |
 |---|---|---|---|
-| LAN (Users) | ✅ Oui | 10.10.10.100 → 10.10.10.200 | Postes utilisateurs, attribution dynamique standard |
-| SERVERS | ❌ Non | — | IP fixes attribuées manuellement (voir [addressing/ip-plan.md](../addressing/ip-plan.md)) — un serveur doit conserver une adresse stable et prévisible |
-| IT | ✅ Oui | 10.10.30.50 → 10.10.30.100 | Postes d'administration, plage réduite (peu d'équipements attendus) |
+| LAN (Users) | ✅ Yes | 10.10.10.100 → 10.10.10.200 | User workstations, standard dynamic assignment |
+| SERVERS | ❌ No | — | Static IPs assigned manually (see [addressing/ip-plan.md](../addressing/ip-plan.md)) — a server needs to keep a stable, predictable address |
+| IT | ✅ Yes | 10.10.30.50 → 10.10.30.100 | Admin workstations, smaller range (few devices expected) |
 
-## Fonctionnement attendu (séquence DORA)
+## Expected behavior (DORA sequence)
 
 ```
 DHCP Discover (client)
@@ -24,20 +24,20 @@ DHCP Request (client)
 DHCP ACK (Dnsmasq)
 ```
 
-Le client obtient : adresse IP, masque, passerelle, serveur(s) DNS.
+The client obtains: IP address, subnet mask, gateway, DNS server(s).
 
-## Point de configuration à deux niveaux — piège rencontré
+## Two-level configuration — issue encountered
 
-Sur OPNsense avec Dnsmasq, il existe **deux réglages distincts et faciles à confondre** :
-1. `Services > Dnsmasq DNS & DHCP > General > Interface` — la liste globale des interfaces sur lesquelles le service **écoute** réellement
-2. `Services > Dnsmasq DNS & DHCP > DHCP ranges` — les plages DHCP configurées par interface
+On OPNsense with Dnsmasq, there are **two distinct settings that are easy to confuse**:
+1. `Services > Dnsmasq DNS & DHCP > General > Interface` — the global list of interfaces the service actually **listens** on
+2. `Services > Dnsmasq DNS & DHCP > DHCP ranges` — the DHCP ranges configured per interface
 
-Une plage peut être parfaitement configurée dans (2) et pourtant rester totalement inopérante si l'interface correspondante n'est pas cochée dans (1). Voir le détail complet de cet incident, diagnostiqué par capture tcpdump, dans [troubleshooting/incident-02.md](../troubleshooting/incident-02.md).
+A range can be perfectly configured in (2) and still be completely non-functional if the matching interface isn't checked in (1). See the full breakdown of this incident, diagnosed via tcpdump capture, in [troubleshooting/incident-02.md](../troubleshooting/incident-02.md).
 
-## Tests de validation
+## Validation tests
 
-| Test | Résultat |
+| Test | Result |
 |---|---|
-| `PC-user1` sur LAN → `ipconfig` | IP `10.10.10.101/24`, gateway `10.10.10.1` obtenue correctement |
-| Carte réseau secondaire sur IT → `ipconfig /renew` | IP `10.10.30.89/24`, gateway `10.10.30.1` obtenue correctement (après correction de l'incident 02) |
-| SERVERS (Ubuntu, Windows Server) | Pas de DHCP — IP fixes configurées manuellement (Netplan sur Ubuntu, Panneau de configuration réseau sur Windows) |
+| `PC-user1` on LAN → `ipconfig` | IP `10.10.10.101/24`, gateway `10.10.10.1` correctly obtained |
+| Secondary network adapter on IT → `ipconfig /renew` | IP `10.10.30.89/24`, gateway `10.10.30.1` correctly obtained (after fixing incident 02) |
+| SERVERS (Ubuntu, Windows Server) | No DHCP — static IPs configured manually (Netplan on Ubuntu, Network Control Panel on Windows) |

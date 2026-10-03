@@ -1,10 +1,10 @@
-# Schéma d'architecture
+# Network Architecture Diagram
 
-Ce dossier doit contenir :
-- `network-diagram.png` — export visuel du schéma réseau (capture d'écran de ton outil de diagramme, ou export du .drawio ci-dessous)
-- `topology.drawio` — fichier source éditable (draw.io / diagrams.net)
+This folder should contain:
+- `network-diagram.png` — visual export of the network diagram (screenshot from your diagramming tool, or an export of the .drawio file below)
+- `topology.drawio` — editable source file (draw.io / diagrams.net)
 
-## Schéma textuel de référence
+## Reference text diagram
 
 ```
                               INTERNET
@@ -19,8 +19,8 @@ Ce dossier doit contenir :
            LAN (Users)      SERVERS            IT / Admin
           10.10.10.0/24    10.10.20.0/24      10.10.30.0/24
                 │                 │                 │
-           PC-user1         SRV-Ubuntu1         Poste admin
-           (Windows)        DC-Server1          (test SSH/VPN)
+           PC-user1         SRV-Ubuntu1         Admin workstation
+           (Windows)        DC-Server1          (SSH/VPN testing)
                              (Nginx, SSH)
                              (AD, DNS)
                                                       │
@@ -28,14 +28,14 @@ Ce dossier doit contenir :
                                              10.10.99.0/24
                                                       │
                                            PC-Admin-Remote
-                                          (poste "à la maison")
+                                          ("home" workstation)
 ```
 
-## Comment générer le schéma visuel
+## How to generate the visual diagram
 
-1. Va sur [draw.io](https://app.diagrams.net/) (ou l'app diagrams.net)
-2. Reproduis le schéma ci-dessus avec les formes réseau standards (routeur, switch, serveurs, postes)
-3. Exporte en `.png` → place-le ici sous le nom `network-diagram.png`
-4. Sauvegarde le fichier source `.drawio` dans ce même dossier
+1. Go to [draw.io](https://app.diagrams.net/) (or the diagrams.net app)
+2. Recreate the diagram above using standard network shapes (router, switch, servers, workstations)
+3. Export as `.png` → save it here as `network-diagram.png`
+4. Save the `.drawio` source file in this same folder
 
-Alternative rapide : une capture d'écran annotée du Dashboard OPNsense (`Interfaces > Overview`) complétée d'une légende peut aussi servir de point de départ.
+Quick alternative: an annotated screenshot of the OPNsense Dashboard (`Interfaces > Overview`) with a legend can also work as a starting point.

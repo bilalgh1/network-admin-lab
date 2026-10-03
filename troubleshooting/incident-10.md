@@ -1,58 +1,58 @@
-# Incident 10 — Service DNS arrêté sur le contrôleur de domaine
+# Incident 10 — DNS service stopped on the domain controller
 
-## Catégorie
-Couche application / DNS
+## Category
+Application layer / DNS
 
-## Scénario
+## Scenario
 
-Incident volontairement provoqué : arrêt du service DNS Windows sur `DC-Server1`.
+Deliberately staged incident: stopped the Windows DNS service on `DC-Server1`.
 ```
 net stop DNS
 ```
 
-## Symptôme
+## Symptom
 
-Depuis `PC-user1` :
+From `PC-user1`:
 ```
 ping 10.10.20.20
 ```
-→ 0% perte, le serveur reste parfaitement joignable au niveau réseau.
+→ 0% loss, the server stays fully reachable at the network level.
 
 ```
 nslookup WIN-A5T5IRJE99D.company.local 10.10.10.1
 ```
-→ échec :
+→ failure:
 ```
 DNS request timed out.
     timeout was 2 seconds.
 *** Request to OPNsense timed-out
 ```
 
-## Analyse
+## Analysis
 
-Même logique que l'incident 09 : la couche réseau (ICMP) reste saine, seul le service applicatif précis (DNS, port 53) est en cause sur le contrôleur de domaine. OPNsense transmet correctement la requête vers le forwarder configuré (`10.10.20.20`, voir [services/dns.md](../services/dns.md)) mais n'obtient aucune réponse, d'où le timeout observé côté client.
+Same logic as incident 09: the network layer (ICMP) stays healthy, only the specific application service (DNS, port 53) on the domain controller is at fault. OPNsense correctly forwards the query to the configured forwarder (`10.10.20.20`, see [services/dns.md](../services/dns.md)) but gets no reply, hence the timeout observed on the client side.
 
-## Diagnostic (côté serveur)
+## Diagnosis (server side)
 
-Consultation du statut du service DNS via la console `dnsmgmt.msc`, ou en ligne de commande :
+Checked the DNS service status via the `dnsmgmt.msc` console, or from the command line:
 ```
 sc query DNS
 ```
-→ confirme le service arrêté.
+→ confirms the service is stopped.
 
-## Correction
+## Fix
 
 ```
 net start DNS
 ```
 
-## Vérification
+## Verification
 
 ```
 nslookup WIN-A5T5IRJE99D.company.local 10.10.10.1
 ```
-→ réponse correcte restaurée (`10.10.20.20`).
+→ correct answer restored (`10.10.20.20`).
 
-## Leçon retenue
+## Lesson learned
 
-Cet incident illustre la chaîne complète de résolution DNS mise en place dans ce projet : client → OPNsense (Dnsmasq, forwarding `company.local`) → contrôleur de domaine (DNS Windows). Une panne à n'importe quel maillon de cette chaîne casse la résolution de bout en bout, même si tous les maillons précédents restent pleinement fonctionnels. D'où l'intérêt de tester chaque étape séparément (résolution directe sur le DC vs via OPNsense, comme pratiqué dans l'incident 03) pour localiser précisément le maillon fautif plutôt que de supposer une cause globale.
+This incident illustrates the full DNS resolution chain built in this project: client → OPNsense (Dnsmasq, `company.local` forwarding) → domain controller (Windows DNS). An outage at any link in this chain breaks resolution end to end, even if every earlier link stays fully functional. Hence the value of testing each step separately (direct resolution on the DC vs. via OPNsense, as done in incident 03) to pinpoint exactly which link is at fault, rather than assuming a global cause.

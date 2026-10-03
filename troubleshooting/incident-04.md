@@ -1,54 +1,54 @@
-# Incident 04 — VPN WireGuard, échec de handshake (causes multiples)
+# Incident 04 — WireGuard VPN handshake failure (multiple causes)
 
-## Catégorie
-Réseau / NAT / firewall — incident à causes imbriquées
+## Category
+Network / NAT / firewall — multi-cause incident
 
-## Contexte
+## Context
 
-Mise en place du VPN WireGuard pour l'accès admin distant (voir [services/vpn.md](../services/vpn.md)). Instance serveur, peer, interface assignée et règles firewall configurées conformément au plan.
+Setting up the WireGuard VPN for remote admin access (see [services/vpn.md](../services/vpn.md)). Server instance, peer, assigned interface, and firewall rules all configured per plan.
 
-## Symptôme initial
+## Initial symptom
 
-Le tunnel apparaît "Active" côté client Windows, mais le peer reste en statut **rouge** côté OPNsense (`VPN > WireGuard > Status`), avec "Handshake Age" vide et 0 octet envoyé/reçu des deux côtés. `ping 10.10.30.1` depuis le client VPN échoue systématiquement (100% perte).
+The tunnel shows "Active" on the Windows client side, but the peer stays **red** on the OPNsense side (`VPN > WireGuard > Status`), with an empty "Handshake Age" and 0 bytes sent/received on both ends. `ping 10.10.30.1` from the VPN client fails consistently (100% loss).
 
-## Démarche de diagnostic (plusieurs causes identifiées et corrigées successivement)
+## Diagnostic process (several causes identified and fixed one after another)
 
-### 1. Topologie WAN incorrecte
-Découverte que la carte WAN d'OPNsense était en mode **NAT** (`10.0.2.15`, adresse typique VirtualBox) plutôt qu'en Bridged comme initialement prévu. Un client VPN lui-même en NAT (simulant un poste "à la maison") ne pouvait pas joindre une IP interne au NAT d'une autre VM — les deux VMs étaient chacune dans leur propre "bulle" NAT isolée, sans chemin direct entre elles.
+### 1. Incorrect WAN topology
+Discovered that OPNsense's WAN card was in **NAT** mode (`10.0.2.15`, a typical VirtualBox address) rather than Bridged as originally planned. A VPN client itself behind NAT (simulating a "home" workstation) couldn't reach an address internal to another VM's NAT — the two VMs were each stuck in their own isolated NAT "bubble," with no direct path between them.
 
-**Action** : passage de WAN en Bridged → obtention d'une IP réelle du réseau domestique (`192.168.1.20`). Amélioration partielle (Endpoint théoriquement joignable), mais handshake toujours en échec.
+**Action**: switched WAN to Bridged → obtained a real address on the home network (`192.168.1.20`). Partial improvement (Endpoint theoretically reachable), but handshake still failing.
 
-### 2. Règle firewall WAN manquante
-Le port WireGuard (UDP/51820) n'était pas explicitement autorisé en entrée sur l'interface WAN — deny by default s'applique aussi sur WAN. Règle `Pass UDP 51820 → WAN address` créée.
+### 2. Missing WAN firewall rule
+The WireGuard port (UDP/51820) wasn't explicitly allowed inbound on the WAN interface — deny by default also applies on WAN. Created a `Pass UDP 51820 → WAN address` rule.
 
-**Résultat** : aucun changement observé à ce stade.
+**Result**: no change observed at this stage.
 
-### 3. Promiscuous Mode de la carte Bridged
-Piste explorée : en mode Bridged, VirtualBox peut par défaut restreindre le trafic inter-VM passant par le pont réseau de l'hôte. Passage de "Promiscuous Mode" sur "Allow All".
+### 3. Promiscuous Mode on the Bridged adapter
+Explored possibility: in Bridged mode, VirtualBox can by default restrict inter-VM traffic passing through the host's network bridge. Switched "Promiscuous Mode" to "Allow All."
 
-**Résultat** : aucun changement observé.
+**Result**: no change observed.
 
-### 4. Cause principale — options "Block private/bogon networks"
-OPNsense active par défaut, sur l'interface WAN, deux protections : **"Block private networks"** et **"Block bogon networks"**. Elles sont évaluées **avant** toute règle personnalisée. Tout le trafic testé jusqu'ici provenait d'adresses privées ou réservées (`192.168.x.x`, puis `203.0.113.0/24` lors d'un test en réseau interne simulé, puis `10.0.2.x` en NAT) — systématiquement bloqué par ces deux options, rendant inutile la règle créée à l'étape 2.
+### 4. Main root cause — "Block private/bogon networks" options
+OPNsense enables, by default on the WAN interface, two protections: **"Block private networks"** and **"Block bogon networks"**. These are evaluated **before** any custom rule. All traffic tested so far came from private or reserved addresses (`192.168.x.x`, then `203.0.113.0/24` during a test on a simulated internal network, then `10.0.2.x` under NAT) — consistently blocked by these two options, making the rule created in step 2 useless.
 
-**Action** : décochées sur `Interfaces > [WAN] > Generic configuration`.
+**Action**: unchecked them under `Interfaces > [WAN] > Generic configuration`.
 
-### 5. Peer client obsolète
-Après plusieurs changements de topologie réseau en cours de diagnostic (Bridged, réseau interne simulé, retour au NAT d'origine), un **peer obsolète** restait configuré côté client avec un ancien Endpoint ne correspondant plus à la topologie finale — cause d'échecs redondants malgré des corrections par ailleurs correctes à ce stade.
+### 5. Stale client peer
+After several network topology changes made during diagnosis (Bridged, simulated internal network, back to the original NAT), a **stale peer** was still configured on the client side with an old Endpoint that no longer matched the final topology — causing repeated failures despite otherwise correct fixes at this point.
 
-**Action** : suppression de tous les anciens peers, création d'une configuration unique et cohérente (`Endpoint = 10.0.2.2:51820`, correspondant au NAT restauré, avec redirection de port UDP/51820 → `10.0.2.15` configurée sur la carte NAT d'OPNsense).
+**Action**: deleted all old peers, created a single, consistent configuration (`Endpoint = 10.0.2.2:51820`, matching the restored NAT setup, with UDP/51820 port forwarding → `10.0.2.15` configured on OPNsense's NAT card).
 
-## Vérification finale
+## Final verification
 
-`VPN > WireGuard > Status` → peer au vert, Handshake Age récent.
+`VPN > WireGuard > Status` → peer green, recent Handshake Age.
 
-Depuis le poste client VPN :
+From the VPN client:
 ```
-ping 10.10.30.1   → 0% perte (IT, autorisé)
-ping 10.10.20.10  → 100% perte (SERVERS, non autorisé)
-ping 10.10.10.1   → 100% perte (LAN, non autorisé)
+ping 10.10.30.1   → 0% loss (IT, allowed)
+ping 10.10.20.10  → 100% loss (SERVERS, not allowed)
+ping 10.10.10.1   → 100% loss (LAN, not allowed)
 ```
 
-## Leçon retenue
+## Lesson learned
 
-Cet incident a cumulé **plusieurs causes indépendantes** qu'il a fallu isoler une à une, en changeant une variable à la fois et en revérifiant après chaque correction : topologie réseau (NAT/Bridged), options de sécurité masquant silencieusement les règles personnalisées (private/bogon), et état de configuration client devenu incohérent après plusieurs itérations de test. Bon exemple pour illustrer qu'un incident réseau complexe n'a pas toujours une cause unique — la persévérance méthodique, en gardant une trace de chaque hypothèse testée et son résultat, est ce qui permet in fine d'isoler chaque facteur.
+This incident stacked up **several independent causes** that had to be isolated one by one, changing one variable at a time and re-verifying after each fix: network topology (NAT/Bridged), security options silently masking custom rules (private/bogon), and client configuration state that became stale after several rounds of testing. A good example that a complex network incident doesn't always have a single root cause — methodical persistence, keeping track of each hypothesis tested and its outcome, is ultimately what isolates every factor.

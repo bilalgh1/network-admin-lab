@@ -1,69 +1,69 @@
-# Incident 08 — Mauvaise gateway
+# Incident 08 — Wrong gateway
 
-## Catégorie
-Routage
+## Category
+Routing
 
-## Contexte
+## Context
 
-Incident volontairement provoqué pour illustrer un cas classique de troubleshooting réseau (exemple cité dans le brief initial du projet).
+Deliberately staged incident to illustrate a classic network troubleshooting case (example cited in the project's original brief).
 
-## Scénario
+## Scenario
 
-Sur `PC-user1`, passage de la carte réseau en IP fixe avec une passerelle volontairement erronée :
-- IP : `10.10.10.150`
-- Masque : `255.255.255.0`
-- Gateway : `10.10.10.99` (au lieu de la vraie, `10.10.10.1`)
+On `PC-user1`, switched the network adapter to a static IP with a deliberately wrong gateway:
+- IP: `10.10.10.150`
+- Mask: `255.255.255.0`
+- Gateway: `10.10.10.99` (instead of the real one, `10.10.10.1`)
 
-## Symptôme
+## Symptom
 
 ```
-ping 10.10.10.1   → ✅ succès (réseau local)
-ping 8.8.8.8      → ❌ échec attendu (Internet)
+ping 10.10.10.1   → ✅ success (local network)
+ping 8.8.8.8      → ❌ expected failure (Internet)
 ```
 
-## Premier test faussé
+## First misleading test
 
-Au premier essai, `ping 8.8.8.8` réussissait malgré tout, contrairement à ce qu'impliquait la configuration de gateway erronée.
+On the first attempt, `ping 8.8.8.8` still succeeded, contrary to what the wrong gateway configuration implied.
 
-### Diagnostic
+### Diagnosis
 ```
 ipconfig
 ```
-a révélé la cause : une **seconde carte réseau** ("Ethernet 2"), reliquat d'un test SSH précédent (branchée sur `intnet-it`), était toujours active avec une IP et une gateway valides sur `10.10.30.0/24`. Windows utilisait cette route alternative pour sortir vers Internet, masquant complètement l'effet de la gateway cassée sur la première carte.
+revealed the cause: a **second network adapter** ("Ethernet 2"), leftover from an earlier SSH test (connected to `intnet-it`), was still active with a valid IP and gateway on `10.10.30.0/24`. Windows used this alternate route to reach the Internet, completely masking the effect of the broken gateway on the first adapter.
 
-### Point retenu
-Sur une machine disposant de plusieurs cartes réseau actives, un problème de gateway sur une interface peut être invisible si une autre interface offre une route de secours valide. Toujours vérifier `ipconfig` en entier (pas uniquement la carte modifiée) avant de conclure qu'un test de panne n'a pas produit l'effet escompté.
+### Takeaway
+On a multi-adapter machine, a gateway problem on one interface can be invisible if another interface offers a valid fallback route. Always check `ipconfig` in full (not just the adapter being modified) before concluding a failure test didn't produce the expected effect.
 
-## Test propre (après désactivation de "Ethernet 2")
+## Clean test (after disabling "Ethernet 2")
 
 ```
 ping 10.10.10.1
 ```
-→ 0% perte, succès normal (réseau local, résolution ARP directe, la gateway n'intervient pas pour une communication sur le même sous-réseau).
+→ 0% loss, normal success (same local subnet, direct ARP resolution, the gateway isn't involved).
 
 ```
 ping 8.8.8.8
 ```
-→ 75% perte, `Destination host unreachable` renvoyé par la machine elle-même (pas un timeout réseau classique) — la machine sait immédiatement qu'elle ne peut pas router vers l'extérieur, faute de gateway valide dans sa table de routage.
+→ 75% loss, `Destination host unreachable` returned by the machine itself (not a regular network timeout) — the machine immediately knows it can't route outbound, lacking a valid gateway in its routing table.
 
-## Diagnostic complémentaire
+## Complementary diagnosis
 
 ```
 ping 10.10.10.99
 ```
-(la gateway configurée) → timeout, gateway inexistante sur le réseau — confirme que la gateway elle-même est injoignable, cause directe du problème.
+(the configured gateway) → timeout, gateway doesn't exist on the network — confirms the gateway itself is unreachable, the root cause of the problem.
 
-## Correction
+## Fix
 
-Remise de la bonne gateway (`10.10.10.1`), ou repassage en DHCP automatique.
+Restored the correct gateway (`10.10.10.1`), or switched back to automatic DHCP.
 
-## Vérification
+## Verification
 
 ```
 ping 8.8.8.8
 ```
-→ de nouveau réussi après correction.
+→ succeeds again after the fix.
 
-## Leçon retenue
+## Lesson learned
 
-Un ping réussi vers le réseau local n'implique pas un routage fonctionnel vers l'extérieur — la gateway n'intervient que pour le trafic destiné à un réseau distant. En cas de panne Internet avec réseau local fonctionnel, tester systématiquement la gateway elle-même (`ping <IP gateway>`) pour confirmer ou écarter cette piste rapidement, et vérifier l'ensemble des interfaces actives sur la machine testée.
+A successful ping to the local network doesn't imply working routing to the outside world — the gateway only comes into play for traffic headed to a remote network. When troubleshooting an Internet outage with a working local network, systematically test the gateway itself (`ping <gateway IP>`) to quickly confirm or rule out this path, and check every active interface on the machine under test.

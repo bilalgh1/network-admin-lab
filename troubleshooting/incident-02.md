@@ -1,58 +1,58 @@
-# Incident 02 — DHCP n'écoute pas sur l'interface IT
+# Incident 02 — DHCP not listening on the IT interface
 
-## Catégorie
-Service / configuration à deux niveaux
+## Category
+Service / two-level configuration
 
-## Contexte
+## Context
 
-Ajout d'une 2e carte réseau sur `PC-user1`, branchée sur `intnet-it`, pour simuler un poste admin et tester l'accès SSH depuis le réseau IT.
+Added a 2nd network adapter on `PC-user1`, connected to `intnet-it`, to simulate an admin workstation and test SSH access from the IT network.
 
-## Symptôme
+## Symptom
 
-La nouvelle carte ("Ethernet 2") reste en IP APIPA (`169.254.x.x`). `ipconfig /renew "Ethernet 2"` échoue :
+The new adapter ("Ethernet 2") stays on an APIPA address (`169.254.x.x`). `ipconfig /renew "Ethernet 2"` fails:
 ```
 unable to contact your DHCP server. Request has timed out.
 ```
 
-## Hypothèses testées (dans l'ordre)
+## Hypotheses tested (in order)
 
-1. **Carte réseau VirtualBox désactivée** côté OPNsense → vérification de `Configuration > Réseau > Carte 4` d'`OPNsense-FW` : "Activer l'interface réseau" était effectivement décoché → corrigé, mais le problème persistait après correction et redémarrage. Hypothèse partiellement confirmée mais insuffisante.
-2. **Service Dnsmasq arrêté** → vérifié via `service dnsmasq status` en shell OPNsense (Diagnostics > Shell) : service actif (`running as pid ...`). Hypothèse écartée.
-3. **Trafic bloqué en chemin** (firewall, routage) → testé par capture réseau (voir ci-dessous).
+1. **VirtualBox network adapter disabled** on the OPNsense side → checked `Settings > Network > Adapter 4` on `OPNsense-FW`: "Enable Network Adapter" was indeed unchecked → fixed, but the problem persisted after the fix and a reboot. Hypothesis partially confirmed but not sufficient.
+2. **Dnsmasq service stopped** → checked via `service dnsmasq status` in the OPNsense shell (Diagnostics > Shell): service active (`running as pid ...`). Hypothesis dismissed.
+3. **Traffic blocked somewhere in the path** (firewall, routing) → tested via packet capture (see below).
 
-## Commandes / Wireshark-tcpdump
+## Commands / Wireshark-tcpdump
 
-Capture directement sur l'interface IT d'OPNsense :
+Captured directly on OPNsense's IT interface:
 ```
 tcpdump -i em3 port 67 or port 68 -n
 ```
-Résultat : les requêtes DHCP Discover/Request du client **arrivent bien** jusqu'à l'interface (paquets `BOOTP/DHCP, Request from ...` visibles), mais **aucune réponse (Offer/ACK) n'est émise** par OPNsense.
+Result: the client's DHCP Discover/Request packets **do arrive** at the interface (`BOOTP/DHCP, Request from ...` packets visible), but **no reply (Offer/ACK) is ever sent** by OPNsense.
 
-## Analyse
+## Analysis
 
-Le paquet arrive à destination mais n'est pas traité par le service DHCP — signe d'un problème de configuration du service lui-même, pas d'un problème réseau/câblage.
+The packet reaches its destination but isn't processed by the DHCP service — a sign of a configuration issue with the service itself, not a network/wiring problem.
 
-Vérification de `Services > Dnsmasq DNS & DHCP > General > Interface` : ce champ (liste à sélection multiple déterminant sur quelles interfaces le service **écoute** réellement) ne contenait que **LAN**. L'interface IT n'y avait jamais été ajoutée — alors que la plage DHCP pour IT (`Services > Dnsmasq DNS & DHCP > DHCP ranges`) était, elle, parfaitement configurée et visible dans la liste des plages.
+Checked `Services > Dnsmasq DNS & DHCP > General > Interface`: this field (a multi-select list determining which interfaces the service actually **listens** on) only contained **LAN**. The IT interface had never been added to it — even though the DHCP range for IT (`Services > Dnsmasq DNS & DHCP > DHCP ranges`) was perfectly configured and visible in the ranges list.
 
-## Cause
+## Root cause
 
-Deux niveaux de configuration distincts sur Dnsmasq, faciles à confondre :
-- (a) la liste globale des interfaces écoutées (`General > Interface`)
-- (b) les plages DHCP par interface (`DHCP ranges`)
+Two distinct, easily confused configuration levels on Dnsmasq:
+- (a) the global list of listened-on interfaces (`General > Interface`)
+- (b) the DHCP ranges per interface (`DHCP ranges`)
 
-Une plage peut être correctement configurée dans (b) et pourtant rester totalement inopérante si l'interface correspondante n'est pas cochée dans (a). Le service tournait, recevait les paquets, mais les ignorait silencieusement car IT n'était pas dans sa liste d'écoute.
+A range can be correctly configured in (b) and still be completely non-functional if the matching interface isn't checked in (a). The service was running and receiving the packets, but silently ignoring them because IT wasn't in its listen list.
 
-## Correction
+## Fix
 
-Ajout de `IT` dans le champ `Interface` (General), en conservant `LAN` déjà présent. Save, puis redémarrage forcé du service Dnsmasq.
+Added `IT` to the `Interface` field (General), keeping `LAN` already present. Saved, then forced a restart of the Dnsmasq service.
 
-## Vérification
+## Verification
 
 ```
 ipconfig /renew "Ethernet 2"
 ```
-→ IP `10.10.30.89/24`, gateway `10.10.30.1` obtenue correctement.
+→ IP `10.10.30.89/24`, gateway `10.10.30.1` correctly obtained.
 
-## Leçon retenue
+## Lesson learned
 
-Sur OPNsense avec le service unifié Dnsmasq DNS & DHCP, une configuration apparemment correcte (plage DHCP bien définie) peut ne produire aucun effet si l'interface n'est pas explicitement ajoutée à la liste d'écoute globale du service. C'est un piège silencieux, sans message d'erreur — seule une capture réseau (tcpdump) permet de distinguer avec certitude "le paquet n'arrive pas" de "le paquet arrive mais n'est pas traité", et donc d'orienter le diagnostic vers la bonne cause.
+On OPNsense with the unified Dnsmasq DNS & DHCP service, an apparently correct configuration (a well-defined DHCP range) can have zero effect if the interface isn't explicitly added to the service's global listen list. This is a silent trap with no error message — only a packet capture (tcpdump) can reliably distinguish "the packet never arrives" from "the packet arrives but isn't processed," and therefore point the diagnosis in the right direction.

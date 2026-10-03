@@ -1,8 +1,8 @@
 # Screenshots
 
-Ce dossier rassemble les captures d'écran prises pendant le projet, utiles en complément des fichiers `.md` du dossier `troubleshooting/` et `services/`.
+This folder gathers screenshots taken throughout the project, as a complement to the `.md` files under `troubleshooting/` and `services/`.
 
-## Organisation suggérée
+## Suggested organization
 
 ```
 screenshots/
@@ -19,16 +19,16 @@ screenshots/
 └── nginx-welcome-page.png
 ```
 
-## Captures prioritaires à inclure (déjà prises pendant le projet)
+## Priority screenshots to include (already captured during the project)
 
-- Dashboard OPNsense (preuve de l'installation réussie)
-- Liste des interfaces (`Interfaces > Assignments`) montrant LAN/SERVERS/IT/WIREGUARD
-- Table des règles firewall (`Firewall > Rules`) pour LAN et WIREGUARD
-- Résultat `tcpdump` de l'incident 02 (requêtes DHCP visibles, sans réponse)
-- Statut WireGuard final (`VPN > WireGuard > Status`) montrant le handshake réussi
-- Page "Welcome to nginx!" affichée depuis le navigateur de PC-user1
-- Connexion réussie au domaine `COMPANY\Administrator` sur DC-Server1
+- OPNsense Dashboard (proof of a successful install)
+- Interface list (`Interfaces > Assignments`) showing LAN/SERVERS/IT/WIREGUARD
+- Firewall rules table (`Firewall > Rules`) for LAN and WIREGUARD
+- `tcpdump` output from incident 02 (DHCP requests visible, no reply)
+- Final WireGuard status (`VPN > WireGuard > Status`) showing a successful handshake
+- "Welcome to nginx!" page shown in PC-user1's browser
+- Successful login to the `COMPANY\Administrator` domain account on DC-Server1
 
-## Convention de nommage
+## Naming convention
 
-`<domaine>-<description>.png`, en minuscules avec tirets — ex. `firewall-block-users-it.png`, `dns-nslookup-success.png`. Facilite les liens relatifs depuis les fichiers `.md` du repo (ex. `![Capture](../screenshots/firewall-block-users-it.png)`).
+`<area>-<description>.png`, lowercase with hyphens — e.g. `firewall-block-users-it.png`, `dns-nslookup-success.png`. Makes it easy to link from the `.md` files in this repo (e.g. `![Screenshot](../screenshots/firewall-block-users-it.png)`).

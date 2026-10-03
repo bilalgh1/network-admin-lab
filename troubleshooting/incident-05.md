@@ -1,33 +1,33 @@
-# Incident 05 — Session web OPNsense invalidée après reboot VM
+# Incident 05 — OPNsense web session invalidated after VM reboot
 
-## Catégorie
+## Category
 Application / session
 
-## Contexte
+## Context
 
-Création de la règle firewall `Block Users → IT` via l'interface web d'OPNsense.
+Creating the `Block Users → IT` firewall rule through the OPNsense web interface.
 
-## Symptôme
+## Symptom
 
-Le formulaire "Edit rule" est rempli correctement (Interface, Action, Source, Destination tous valides), mais le clic sur **Save** ne produit visiblement aucun effet — pas de fermeture de popup, pas de message d'erreur affiché, pas de nouvelle règle dans la liste.
+The "Edit rule" form is filled in correctly (Interface, Action, Source, Destination all valid), but clicking **Save** visibly does nothing — no popup closing, no error message, no new rule appearing in the list.
 
-## Hypothèses testées
+## Hypotheses tested
 
-1. Champ obligatoire manquant (Interface non sélectionnée) → vérifié et corrigé dans un premier temps, mais le souci persistait sur un essai ultérieur similaire.
-2. Erreur silencieuse du formulaire, non visible dans l'interface.
+1. Missing required field (Interface not selected) → checked and fixed initially, but the issue resurfaced on a similar attempt later.
+2. Silent form error, not shown in the UI.
 
-## Diagnostic
+## Diagnosis
 
-La VM `OPNsense-FW` avait été **éteinte puis rallumée** entre deux sessions de travail. La session web (cookie/jeton d'authentification côté API) n'était plus valide après ce redémarrage, sans que l'interface web n'affiche d'indication claire de déconnexion ou d'expiration — le formulaire restait affiché normalement, donnant l'impression que tout fonctionnait, alors que les appels API sous-jacents échouaient silencieusement.
+The `OPNsense-FW` VM had been **powered off and back on** between two working sessions. The web session (authentication cookie/token for the API) was no longer valid after that reboot, without the web interface showing any clear sign of being logged out or the session having expired — the form kept displaying normally, giving the impression everything worked, while the underlying API calls were silently failing.
 
-## Correction
+## Fix
 
-Rechargement complet de la page (F5) — qui a forcé un nouveau login et rétabli une session valide.
+Fully reloaded the page (F5) — which forced a fresh login and restored a valid session.
 
-## Vérification
+## Verification
 
-Après rechargement, nouvelle tentative de création de la règle : sauvegarde réussie immédiatement, règle visible dans la liste.
+After reloading, a new attempt to create the rule saved immediately, with the rule visible in the list.
 
-## Leçon retenue
+## Lesson learned
 
-Après tout redémarrage de la VM OPNsense, recharger systématiquement la page web avant de continuer une session de configuration — une session expirée silencieusement peut faire perdre du temps de diagnostic sur un problème qui n'existe pas réellement côté configuration. Un comportement "le clic ne fait rien, sans erreur visible" doit toujours faire penser à vérifier l'état de la session/connexion avant de chercher une cause plus complexe.
+After any reboot of the OPNsense VM, always reload the web page before resuming a configuration session — a silently expired session can waste diagnostic time on a problem that doesn't actually exist on the configuration side. A "the click does nothing, with no visible error" behavior should always prompt checking session/connection state before looking for a more complex cause.
